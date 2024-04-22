@@ -1,21 +1,25 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 
 public class ObjectPool : MonoBehaviour
 {
     public GameObject damageTextPrefab;
     public GameObject damageEffectPrefab;
+    public GameObject SkillPrefab;
 
     private GameObject[] damageText;
     private GameObject[] damageEffect;
+    private GameObject[] Skill;
 
     private GameObject[] targetPool;
 
     void Awake()
     {
-        damageText = new GameObject[10];
-        damageEffect = new GameObject[10];
+        damageText = new GameObject[100];
+        damageEffect =  new GameObject[100];
+        Skill =  new GameObject[10];
 
         Generate();
     }
@@ -31,6 +35,11 @@ public class ObjectPool : MonoBehaviour
         {
             damageEffect[i] = Instantiate(damageEffectPrefab, transform); // Set parent as ObjectManager
             damageEffect[i].SetActive(false);
+        }   
+        for (int i = 0; i < Skill.Length; i++)
+        {
+            Skill[i] = Instantiate(SkillPrefab, transform); // Set parent as ObjectManager
+            Skill[i].SetActive(false);
         }
     }
 
@@ -43,6 +52,9 @@ public class ObjectPool : MonoBehaviour
                 break;
             case "damageEffect":
                 targetPool = damageEffect;
+                break; 
+            case "Skill":
+                targetPool = Skill;
                 break;
         }
 

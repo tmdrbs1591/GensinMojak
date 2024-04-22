@@ -3,101 +3,49 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
-using System.Runtime.Serialization;
 
-public class TPSCharController : MonoBehaviour
+public class TPSCharController : PlayerBase
 {
-    [Header("플레이어 스텟")]
-    [SerializeField] float moveSpeed;
-    [SerializeField] float runSpeed; 
-    [SerializeField] float curSpeed;
-    [SerializeField] float AttackDamage;
-    [SerializeField] float JumpPower;
 
-    [Header("쿨타임")]
-    [SerializeField] float AttackcoolTime = 0.5f;
-    private float AttackcurTime;
-
- 
-    [Space]
-    [SerializeField] private Transform characterBody;
-    [SerializeField] private Transform cameraArm;
-    [SerializeField] private ObjectPool objectpool;
-    [Space]
-
-    [SerializeField] private Vector3 AttackboxSize;
-    [SerializeField] private Transform AttackboxPos;
+    [SerializeField] protected Vector3 AttackboxSize;
+    [SerializeField] protected Transform AttackboxPos;
+    [SerializeField] protected Vector3 UltimateboxSize;
+    [SerializeField] protected Transform UltimateboxPos;
+    [SerializeField] protected Camera UltimateCamera;
+    [SerializeField] protected Camera mainCamera;
 
     [Header("이펙트")]
-    [SerializeField] private GameObject[] Slash;
-    [SerializeField] private GameObject DamageEffect;
-    [SerializeField] private TMP_Text DamageText;
+    [SerializeField] protected GameObject[] Slash;
+    [SerializeField] protected GameObject DamageEffect;
+    [SerializeField] protected GameObject SkillEffect;
+    [SerializeField] protected GameObject UltimateReadyEffect;
+    [SerializeField] protected GameObject UltimateEffect;
+    [SerializeField] protected GameObject SkinMesh;
 
-    int attackIndex;
-    float attackBuffer;
-
-
-    bool isAttack = false;
-    bool isGround = false;
-        
-   
-
-    Animator anim;
-    Rigidbody rb;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>(); 
         anim = characterBody.GetComponent<Animator>();
 
-
     }
 
   
     void Update()
     {
-        Cursor.visible = false;
-        Cursor.lockState = CursorLockMode.Locked;
+     
         if (!CameraShake.instance.isShake)//카메라 흔들리는중에는 화면 회전 불가능
                 LookAround();
+        if (!isUltimate) { 
         Attack();
         Move();
         Jump();
-    }
-    void Move()
-    {
-        Vector2 moveInput = new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
-        bool isMove = moveInput.magnitude != 0;
-        anim.SetBool("isMove", isMove);
-        if (isMove && !isAttack)
-        {
-
-            Vector3 lookForward = new Vector3(cameraArm.forward.x,0f,cameraArm.forward.z).normalized;
-            Vector3 lookRight = new Vector3(cameraArm.right.x,0f,cameraArm.right.z).normalized;
-            Vector3 moveDir = lookForward * moveInput.y + lookRight * moveInput.x;
-
-                characterBody.forward = moveDir;
-
-            transform.position += moveDir * Time.deltaTime * curSpeed;
-            if (Input.GetKeyDown(KeyCode.LeftShift))
-            {
-                Run(true, runSpeed);
-            }
-            else if(Input.GetKeyUp(KeyCode.LeftShift))
-            {
-                Run(false, moveSpeed);
-            }
-
+        Skills();
+        Ultimate();
         }
-        
-        Debug.DrawRay(cameraArm.position,new Vector3(cameraArm.forward.x,0f,cameraArm.forward.z).normalized,Color.red);
     }
+  
 
-    void Run(bool isRun, float speed)
-    {
-        anim.SetBool("isRun", isRun);
-        curSpeed = speed;
-    }
     void Attack()
     {
         attackBuffer -= Time.deltaTime;
@@ -108,52 +56,53 @@ public class TPSCharController : MonoBehaviour
         {
             if (attackBuffer > 0)
             {
-                switch(attackIndex)
+                Vector3 lookForward = new Vector3(cameraArm.forward.x, 0f, cameraArm.forward.z).normalized;
+                moveDir = lookForward;
+
+                characterBody.forward = moveDir;
+                switch (attackIndex)
                 {
                     case 1:
                         if (Slash[0].activeSelf)
                         {
+                            AudioManager.instance.PlaySound(transform.position, 0, UnityEngine.Random.Range(1.1f, 1.1f), 1);
+
                             StartCoroutine(SlashPrcCor(3));
                         }
                         else
                         {
+                            AudioManager.instance.PlaySound(transform.position, 0, UnityEngine.Random.Range(1.1f, 1.1f), 1);
                             StartCoroutine(SlashPrcCor(0));
                         }
                         break;
                     case 2:
+                        AudioManager.instance.PlaySound(transform.position, 0, UnityEngine.Random.Range(1.1f, 1.1f), 1);
+
                         StartCoroutine(SlashPrcCor(1));
                         break;
                     case 3:
+                        AudioManager.instance.PlaySound(transform.position, 0,  UnityEngine.Random.Range(0.8f, 0.8f), 1);
+
                         StartCoroutine(SlashPrcCor(2));
                         break;
                 }
                 anim.SetTrigger("isAttack" + attackIndex.ToString());
 
-                Invoke("Damage",0.1f);
+                StartCoroutine(DamageCor());
                 AttackcurTime = AttackcoolTime; // 쿨타임
-                StartCoroutine(isAttackCor());
+                StartCoroutine(isAttackCor(AttackcoolTime));
 
                 Run(false, moveSpeed);
                 attackIndex++;
-                if (attackIndex >= 4) attackIndex = 1;
+                if (attackIndex >= 4) attackIndex = 1; //4이상되면 1로 돌아감
             }
         }
         else
         {
             AttackcurTime -= Time.deltaTime;
         }
-       
     }
-    void Jump()
-    {
-        if (Input.GetKeyDown(KeyCode.Space) && isGround)
-        {
-            rb.velocity = Vector3.up * JumpPower;
-            anim.SetBool("isJump", true);
-            isGround = false;
 
-        }
-    }
     IEnumerator SlashPrcCor(int index)
     {
         Slash[index].SetActive(true);
@@ -163,65 +112,95 @@ public class TPSCharController : MonoBehaviour
         Slash[index].SetActive(false);
 
     }
-    void LookAround()
+  
+    IEnumerator DamageCor()
     {
-        Vector2 mouseDelta = new Vector2 (Input.GetAxis("Mouse X") , Input.GetAxis("Mouse Y"));
-        Vector3 camAngle = cameraArm.rotation.eulerAngles;
-        float x = camAngle.x - mouseDelta.y;
-
-        if (x < 180f)
-        {
-            x = Mathf.Clamp(x, -1f, 70f);
-        }
-        else
-        {
-
-            x = Mathf.Clamp(x, 335f, 361f);
-        }
-
-        cameraArm.rotation = Quaternion.Euler(x - mouseDelta.y, camAngle.y + mouseDelta.x, camAngle.z);
+        yield return new WaitForSeconds(0.1f);
+        Damage(AttackboxPos, AttackboxSize);
     }
-    void Damage()
+    IEnumerator UltimateDamageCor()
     {
-        DamageText.text = AttackDamage.ToString();
-
-        Collider[] colliders = Physics.OverlapBox(AttackboxPos.position, AttackboxSize / 2f);
-
-        foreach (Collider collider in colliders)
+        for (int i = 0; i < 20; i++)
         {
-            if (collider != null && collider.CompareTag("Enemy"))
-            {
-                Enemy monster = collider.gameObject.GetComponent<Enemy>();
-                Vector3 midPoint = (collider.transform.position + Camera.main.transform.position) / 2f;
+            Damage(UltimateboxPos, UltimateboxSize);
+            AudioManager.instance.PlaySound(transform.position, 0, UnityEngine.Random.Range(1.1f, 1.3f), 1);
+            yield return new WaitForSeconds(0.1f);
+        }
+      
+        
+    }
+   
+    void Skills()
+    {
+        if (Input.GetKeyDown(KeyCode.E))
+        {
+            //CameraShake.instance.Shake();
+
+            StartCoroutine(SkilleffectCor());
+            Vector3 lookForward = new Vector3(cameraArm.forward.x, 0f,cameraArm.forward.z).normalized;
+            moveDir = lookForward;
+
+            anim.SetTrigger("isSkill");
 
 
-                if (monster != null && !monster.isDie)
-                {
+            Instantiate(Skill, transform.position + new Vector3(0, 1, 0), Quaternion.LookRotation(moveDir));
 
-                    float randomZ = UnityEngine.Random.Range(1f, 2f); 
-                    float randomY = UnityEngine.Random.Range(1f, 3f); 
-
-                    // 생성된 무작위 값으로 Vector3를 생성합니다.
-                    Vector3 randomVector = new Vector3(0f, randomY, randomZ); // z값은 0으로 
-
-
-                    GameObject attackEffect = objectpool.MakeObj("damageEffect");
-                    attackEffect.transform.position = collider.transform.position;
-
-                    GameObject attackText = objectpool.MakeObj("damageText");
-                    attackText.transform.position = midPoint + (collider.transform.position - midPoint).normalized * 2 + randomVector;
-
-                    monster.TakeDamage(AttackDamage);
-                    CameraShake.instance.Shake();
-                }
-            }
         }
     }
-    IEnumerator isAttackCor() //공격도중 가마ㄴ히 있게 
+    void Ultimate()
+    {
+        StartCoroutine(UltimateCor());
+
+    }
+    IEnumerator UltimateCor()
+    {
+        if (Input.GetKeyDown(KeyCode.Q))
+        {
+            AudioManager.instance.PlaySound(transform.position, 1, UnityEngine.Random.Range(1f, 1f), 1);
+
+            //스킬 이펙트 모션
+            anim.SetTrigger("isUltimate");
+            isUltimate = true;
+            isUltimateReady = true; //준비할때
+            mainCamera.gameObject.SetActive(false);
+            UltimateCamera.gameObject.SetActive(true); // 스킬카메라 활성화
+            UltimateReadyEffect.SetActive(true) ;
+            StartCoroutine(isAttackCor(3f));
+            yield return new WaitForSeconds(1f);
+            mainCamera.gameObject.SetActive(true);  // 원래카메라 활성화
+            UltimateCamera.gameObject.SetActive(false);
+            isUltimateReady = false;
+            StartCoroutine(UltimateDamageCor());
+            StartCoroutine(UltimatEffectCor());
+            SkinMesh.SetActive(false);
+            UltimateReadyEffect.SetActive(false);
+         
+
+        }
+    }
+    IEnumerator UltimatEffectCor()
+    {
+        UltimateEffect.SetActive(true);
+        yield return new WaitForSeconds(2f);
+        SkinMesh.SetActive(true );
+        UltimateEffect.SetActive(false);
+        isUltimate = false;
+
+
+    }
+    IEnumerator isAttackCor(float Time) //공격도중 가마ㄴ히 있게 
     {
         isAttack = true;
-        yield return new WaitForSeconds(AttackcoolTime);
+        yield return new WaitForSeconds(Time);
         isAttack = false;
+
+    }  
+    IEnumerator SkilleffectCor() //공격도중 가마ㄴ히 있게 
+    {
+        SkillEffect.SetActive(true);
+        yield return new WaitForSeconds(0.4f);
+        SkillEffect.SetActive(false);
+
 
     }
 
@@ -229,16 +208,10 @@ public class TPSCharController : MonoBehaviour
     {
         Gizmos.color = Color.blue;
         Gizmos.DrawWireCube(AttackboxPos.position, AttackboxSize);
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireCube(UltimateboxPos.position, UltimateboxSize);
    
     }
-    private void OnCollisionEnter(Collision collision)
-    {
-        if (collision.gameObject.CompareTag("Ground"))
-        {
-            isGround = true;
-            anim.SetBool("isJump", false);
-
-        }
-    }
+  
 
 }
